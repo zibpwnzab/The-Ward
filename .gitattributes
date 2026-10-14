@@ -1,2 +1,8 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+# Ignore Unity binary/YAML assets and third-party shaders in language stats
+*.mat linguist-detectable=false
+*.asset linguist-detectable=false
+*.prefab linguist-detectable=false
+*.unity linguist-detectable=false
+**/TextMeshPro/** linguist-vendored
