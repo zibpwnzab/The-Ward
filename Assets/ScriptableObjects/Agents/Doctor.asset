@@ -14,8 +14,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::AgentProfileSO
   agentName: DR Why
   portrait: {fileID: 21300000, guid: e0984f1eaf7daae408a09151703a4452, type: 3}
-  weaponry: 1
-  coding: 6
-  charisma: 6
-  stealth: 1
-  cruelty: 3
+  stats:
+  - statType: 0
+    baseValue: 7
+  - statType: 1
+    baseValue: 2
+  - statType: 2
+    baseValue: 6
+  - statType: 3
+    baseValue: 4
+  - statType: 4
+    baseValue: 5

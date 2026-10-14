@@ -1611,7 +1611,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MissionActiveUI
   windowObject: {fileID: 838627374}
   titleText: {fileID: 966225817}
-  missionImage: {fileID: 814366523}
   resultText: {fileID: 0}
   teamChart: {fileID: 1787710891}
   missionChart: {fileID: 1669779405}
@@ -2459,6 +2458,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 265bcafd8883a2442b75a4cbe44de454, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DispatchWindow
+  rosterManager: {fileID: 1937844766}
+  missionActiveUI: {fileID: 838627378}
   slotPrefab: {fileID: 4870686382464112591, guid: c6203a3fcf94d2e40826af9cae361db7, type: 3}
   slotsContainer: {fileID: 1324451012}
   windowObject: {fileID: 1531488688}
@@ -2522,7 +2523,6 @@ MonoBehaviour:
   m_Color: {r: 0.8, g: 0.27235225, b: 0.17647056, a: 0.77254903}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  thickness: 0
   chartSize: 200
   animationProgress: 1
 --- !u!222 &1669779406
@@ -2751,7 +2751,6 @@ MonoBehaviour:
   m_Color: {r: 0.17777678, g: 0.6111181, b: 0.8018868, a: 0.77254903}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  thickness: 0
   chartSize: 200
   animationProgress: 1
 --- !u!222 &1787710892

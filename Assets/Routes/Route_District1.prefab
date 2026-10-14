@@ -421,7 +421,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DistrictRoute
   lineRenderer: {fileID: 201225495627365090}
-  debugColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  gizmoColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
 --- !u!1 &8523969321080542317
 GameObject:
   m_ObjectHideFlags: 0
