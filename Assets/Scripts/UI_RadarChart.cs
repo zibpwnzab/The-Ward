@@ -5,19 +5,16 @@ using UnityEngine.UI;
 public class UI_RadarChart : Graphic
 {
     [Header("Settings")]
-    public float thickness = 0f;
-    public float chartSize = 100f;
-
-    // === НОВОЕ: Прогресс анимации (0 = точка, 1 = полный размер) ===
-    [Range(0, 1)] public float animationProgress = 1f;
+    [SerializeField] private float chartSize = 100f;
+    [SerializeField, Range(0f, 1f)] private float animationProgress = 1f;
 
     private float[] _stats;
 
     public float GetRadiusAtAngle(float angleDegrees)
     {
-        if (_stats == null || _stats.Length < 3) return 0;
+        if (_stats == null || _stats.Length < 3) return 0f;
 
-        angleDegrees = Mathf.Repeat(angleDegrees - 90, 360);
+        angleDegrees = Mathf.Repeat(angleDegrees - 90f, 360f);
         float step = 360f / _stats.Length;
         int index = Mathf.FloorToInt(angleDegrees / step);
         int nextIndex = (index + 1) % _stats.Length;
@@ -26,7 +23,6 @@ public class UI_RadarChart : Graphic
         float r1 = _stats[index];
         float r2 = _stats[nextIndex];
 
-        // Умножаем на animationProgress, чтобы физика мяча тоже учитывала анимацию (если вдруг мяч полетит раньше)
         return Mathf.Lerp(r1, r2, t) * chartSize * animationProgress;
     }
 
@@ -36,11 +32,10 @@ public class UI_RadarChart : Graphic
         SetVerticesDirty();
     }
 
-    // Метод для управления анимацией извне
     public void SetAnimationProgress(float progress)
     {
-        animationProgress = progress;
-        SetVerticesDirty(); // Принудительно перерисовать
+        animationProgress = Mathf.Clamp01(progress);
+        SetVerticesDirty();
     }
 
     protected override void OnPopulateMesh(VertexHelper vh)
@@ -56,12 +51,8 @@ public class UI_RadarChart : Graphic
         for (int i = 0; i < amount; i++)
         {
             float statValue = _stats[i];
-            float angle = (i * angleStep + 90) * Mathf.Deg2Rad;
-
-            // === ВОТ ЗДЕСЬ МАГИЯ АНИМАЦИИ ===
-            // Умножаем позицию на animationProgress
-            Vector3 pos = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle)) * chartSize * statValue * animationProgress;
-
+            float angle = (i * angleStep + 90f) * Mathf.Deg2Rad;
+            Vector3 pos = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f) * (chartSize * statValue * animationProgress);
             vh.AddVert(pos, color, Vector2.zero);
         }
 

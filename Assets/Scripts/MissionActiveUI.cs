@@ -1,16 +1,20 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro;
-using System.Collections; // Нужно для корутин
-using System.Collections.Generic;
 
 public class MissionActiveUI : MonoBehaviour
 {
+    private const float ChartAnimationDuration = 0.4f;
+    private const float InterChartDelay = 0.1f;
+    private const float ResultDisplayDuration = 2.0f;
+
     [Header("UI References")]
     [SerializeField] private GameObject windowObject;
     [SerializeField] private TextMeshProUGUI titleText;
-    [SerializeField] private Image missionImage; // Теперь это поле просто висит, код его не трогает при открытии
-    [SerializeField] private TextMeshProUGUI resultText; // <--- ДОБАВЬ ЭТОТ ТЕКСТ В ПРЕФАБ (WIN/LOSE)
+    [SerializeField] private TextMeshProUGUI resultText;
 
     [Header("Charts")]
     [SerializeField] private UI_RadarChart teamChart;
@@ -20,163 +24,118 @@ public class MissionActiveUI : MonoBehaviour
     [SerializeField] private MissionBall ballScript;
     [SerializeField] private Button proceedButton;
 
-    private System.Action _onMissionSuccess;
+    private Action<bool> _onMissionResolved;
 
-    public void Open(MissionSO mission, List<Agent> agents, System.Action onSuccess)
+    public void Open(MissionSO mission, List<Agent> agents, Action<bool> onMissionResolved)
     {
-        _onMissionSuccess = onSuccess;
+        _onMissionResolved = onMissionResolved;
 
         windowObject.SetActive(true);
-        Time.timeScale = 0f; // Пауза
+        Time.timeScale = 0f;
 
-        // Сброс текстов и мячика
-        if (resultText != null) resultText.text = "";
-        ballScript.gameObject.SetActive(false); // Скрываем мяч пока не нажали старт
+        if (resultText != null) resultText.text = string.Empty;
+        if (ballScript != null) ballScript.gameObject.SetActive(false);
+        if (titleText != null && mission != null) titleText.text = $"ARRIVED AT: {mission.title}";
 
-        if (titleText != null) titleText.text = $"ARRIVED AT: {mission.title}";
-
-        // === ИСПРАВЛЕНИЕ ЗДЕСЬ ===
-        // Мы просто комментируем (или удаляем) этот блок.
-        // Код больше не пытается подставить картинку из MissionSO.
-        /*
-        if (missionImage != null && mission.missionImage != null)
-            missionImage.sprite = mission.missionImage;
-        */
-        // =========================
+        if (proceedButton != null)
+        {
+            proceedButton.interactable = true;
+            proceedButton.gameObject.SetActive(true);
+        }
 
         UpdateCharts(mission, agents);
-        // === ЗАПУСК АНИМАЦИИ ===
-        StartCoroutine(AnimateChartsSequence()); proceedButton.interactable = true;
-        proceedButton.gameObject.SetActive(true);
+        StartCoroutine(AnimateChartsSequence());
     }
-    // ... остальной код оставляем без изменений ...
+
     private IEnumerator AnimateChartsSequence()
     {
-        float durationPerChart = 0.4f; // Время на каждый график
-        float timer = 0f;
-
-        // 1. Сброс в ноль
         if (teamChart != null) teamChart.SetAnimationProgress(0f);
         if (missionChart != null) missionChart.SetAnimationProgress(0f);
 
-        // 2. ЭТАП А: Растет Красный (Миссия)
         if (missionChart != null)
         {
-            timer = 0f;
-            while (timer < durationPerChart)
-            {
-                timer += Time.unscaledDeltaTime;
-                float progress = Mathf.Clamp01(timer / durationPerChart);
-                // Эффект пружины (BackOut) для сочности
-                float swing = progress * progress * (2.7f * progress - 1.7f);
-                // Или просто Sin: Mathf.Sin(progress * Mathf.PI * 0.5f);
-
-                missionChart.SetAnimationProgress(progress); // Используем progress для плавности
-                yield return null;
-            }
-            missionChart.SetAnimationProgress(1f);
+            yield return AnimateChart(missionChart, ChartAnimationDuration);
         }
 
-        // Небольшая пауза между графиками
-        yield return new WaitForSecondsRealtime(0.1f);
+        yield return new WaitForSecondsRealtime(InterChartDelay);
 
-        // 3. ЭТАП Б: Растет Зеленый (Команда) поверх
         if (teamChart != null)
         {
-            timer = 0f;
-            while (timer < durationPerChart)
-            {
-                timer += Time.unscaledDeltaTime;
-                float progress = Mathf.Clamp01(timer / durationPerChart);
-                float eased = Mathf.Sin(progress * Mathf.PI * 0.5f);
-
-                teamChart.SetAnimationProgress(eased);
-                yield return null;
-            }
-            teamChart.SetAnimationProgress(1f);
+            yield return AnimateChart(teamChart, ChartAnimationDuration);
         }
     }
+
+    private IEnumerator AnimateChart(UI_RadarChart chart, float duration)
+    {
+        float timer = 0f;
+        while (timer < duration)
+        {
+            timer += Time.unscaledDeltaTime;
+            float progress = Mathf.Clamp01(timer / duration);
+            float eased = Mathf.Sin(progress * Mathf.PI * 0.5f);
+            chart.SetAnimationProgress(eased);
+            yield return null;
+        }
+        chart.SetAnimationProgress(1f);
+    }
+
     private void UpdateCharts(MissionSO mission, List<Agent> agents)
     {
-        // Порядок статов: 0:Weaponry, 1:Coding, 2:Stealth, 3:Cruelty, 4:Charisma
-        float[] missionStats = new float[5];
-        float[] teamStats = new float[5];
-
-        // --- А. Считаем Требования Миссии ---
-        // Если миссия требует навык уровня 5, мы делим на 8 (максимум), получаем ~0.6
-        if (mission.requiredStats != null)
+        StatType[] statTypes =
         {
-            foreach (var req in mission.requiredStats)
+            StatType.Weaponry,
+            StatType.Coding,
+            StatType.Stealth,
+            StatType.Cruelty,
+            StatType.Charisma
+        };
+
+        int count = statTypes.Length;
+        float[] missionStats = new float[count];
+        float[] teamStats = new float[count];
+
+        for (int i = 0; i < count; i++)
+        {
+            StatType type = statTypes[i];
+
+            int requiredLevel = mission != null ? mission.GetRequiredLevel(type, defaultBaseline: 2) : 2;
+            missionStats[i] = Mathf.Clamp01((float)requiredLevel / Agent.MaxStatValue);
+
+            if (agents != null && agents.Count > 0)
             {
-                int index = GetStatIndex(req.stat);
-                if (index != -1)
+                float sum = 0f;
+                foreach (var agent in agents)
                 {
-                    missionStats[index] = Mathf.Clamp01((float)req.minLevel / 8.0f);
+                    sum += agent.GetEffectiveStat(type);
                 }
+                teamStats[i] = Mathf.Clamp01((sum / agents.Count) / Agent.MaxStatValue);
             }
         }
 
-        // --- Б. Считаем Силу Команды ---
-        // Суммируем статы всех агентов и делим на их количество
-        if (agents != null && agents.Count > 0)
-        {
-            foreach (var agent in agents)
-            {
-                teamStats[0] += agent.GetEffectiveStat(StatType.Weaponry);
-                teamStats[1] += agent.GetEffectiveStat(StatType.Coding);
-                teamStats[2] += agent.GetEffectiveStat(StatType.Stealth);
-                teamStats[3] += agent.GetEffectiveStat(StatType.Cruelty);
-                teamStats[4] += agent.GetEffectiveStat(StatType.Charisma);
-            }
-
-            // Усредняем и нормализуем (делим на 8.0 - макс уровень)
-            for (int i = 0; i < 5; i++)
-            {
-                teamStats[i] /= agents.Count; // Среднее арифметическое
-                teamStats[i] /= 8.0f;         // Перевод в 0.0 - 1.0
-            }
-        }
-
-        // Отправляем данные в "рисовалку"
         if (missionChart != null) missionChart.SetStats(missionStats);
         if (teamChart != null) teamChart.SetStats(teamStats);
     }
 
-    // Помощник: переводим enum в номер индекса массива
-    private int GetStatIndex(StatType type)
+    public void OnProceedClicked()
     {
-        switch (type)
+        if (proceedButton != null) proceedButton.interactable = false;
+
+        if (ballScript != null)
         {
-            case StatType.Weaponry: return 0;
-            case StatType.Coding: return 1;
-            case StatType.Stealth: return 2;
-            case StatType.Cruelty: return 3;
-            case StatType.Charisma: return 4;
-            default: return -1;
+            ballScript.gameObject.SetActive(true);
+            ballScript.Launch(missionChart, teamChart, OnBallStopped);
+        }
+        else
+        {
+            OnBallStopped(true);
         }
     }
 
-    // ЭТОТ МЕТОД ПРИВЯЖИ К КНОПКЕ "START OPERATION"
-    public void OnProceedClicked()
-    {
-        // 1. Выключаем кнопку, чтобы не нажали дважды
-        proceedButton.interactable = false;
-
-        // 2. Включаем мячик
-        ballScript.gameObject.SetActive(true);
-
-        // 3. ЗАПУСКАЕМ МЯЧИК!
-        // Передаем ему графики, чтобы он знал границы
-        ballScript.Launch(missionChart, teamChart, OnBallStopped);
-    }
-    // Этот метод вызовется, когда мячик остановится
     private void OnBallStopped(bool isWin)
     {
-        // Запускаем задержку перед закрытием
         StartCoroutine(ShowResultAndClose(isWin));
     }
 
-    // === НОВАЯ КОРУТИНА ЗАДЕРЖКИ ===
     private IEnumerator ShowResultAndClose(bool isWin)
     {
         if (resultText != null)
@@ -185,23 +144,14 @@ public class MissionActiveUI : MonoBehaviour
             resultText.color = isWin ? Color.green : Color.red;
         }
 
-        Debug.Log($"Result: {isWin}. Closing in 2 seconds...");
-
-        // Ждем 2 секунды РЕАЛЬНОГО времени (игнорируя паузу)
-        yield return new WaitForSecondsRealtime(2.0f);
-
-        CloseAndProceed();
+        yield return new WaitForSecondsRealtime(ResultDisplayDuration);
+        CloseAndProceed(isWin);
     }
 
-    private void CloseAndProceed()
+    private void CloseAndProceed(bool isWin)
     {
-        // 1. Снимаем паузу (ВАЖНО!)
         Time.timeScale = 1f;
-
-        // 2. Закрываем окно
         windowObject.SetActive(false);
-
-        // 3. Продолжаем миссию
-        _onMissionSuccess?.Invoke();
+        _onMissionResolved?.Invoke(isWin);
     }
 }

@@ -1,75 +1,72 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-[System.Serializable]
+[Serializable]
 public class Agent
 {
-    public string Name { get; private set; }
-    public bool isBusy = false; // Занят ли агент прямо сейчас
-    public Sprite Portrait { get; private set; }
-
-    // Текущая усталость (0 - свеж как огурчик, 100 - труп)
-    [Range(0, 100)] public int fatigue;
-
-    // Базовые статы (без штрафов)
-    private Dictionary<StatType, int> _baseStats;
-
-    // Константа: сколько усталости снимает 1 очко навыка.
-    // Например, если penaltyStep = 20, то при усталости 21 агент получит -1 ко всем статам.
+    public const int MinStatValue = 0;
+    public const int MaxStatValue = 8;
+    public const int MaxFatigue = 100;
     private const int FatiguePenaltyStep = 20;
 
-    // Конструктор: создаем живого агента из "Личного дела"
+    private readonly Dictionary<StatType, int> _baseStats;
+
+    public string Name { get; }
+    public Sprite Portrait { get; }
+    public bool IsBusy { get; private set; }
+    public int Fatigue { get; private set; }
+
     public Agent(AgentProfileSO profile)
     {
-        Name = profile.agentName;
-        Portrait = profile.portrait;
-        fatigue = 0; // Новый сотрудник всегда свежий
-        _baseStats = profile.GetStatsDict();
+        if (profile == null) throw new ArgumentNullException(nameof(profile));
+
+        Name = profile.AgentName;
+        Portrait = profile.Portrait;
+        Fatigue = 0;
+        IsBusy = false;
+        _baseStats = profile.GetStatsDictionary();
     }
 
-    // Главный метод: получить ЭФФЕКТИВНЫЙ стат (с учетом усталости)
+    public void SetBusy(bool isBusy)
+    {
+        IsBusy = isBusy;
+    }
+
     public int GetEffectiveStat(StatType type)
     {
-        if (!_baseStats.ContainsKey(type)) return 0;
+        if (!_baseStats.TryGetValue(type, out int baseValue))
+        {
+            return MinStatValue;
+        }
 
-        int baseValue = _baseStats[type];
-
-        // Считаем штраф. (int) деление отбрасывает дробную часть.
-        int penalty = fatigue / FatiguePenaltyStep;
-
-        // Стат не может быть ниже 0, даже если агент умирает от усталости
-        return Mathf.Clamp(baseValue - penalty, 0, 8);
+        int penalty = Fatigue / FatiguePenaltyStep;
+        return Mathf.Clamp(baseValue - penalty, MinStatValue, MaxStatValue);
     }
-    // Внутри класса Agent.cs добавь этот метод:
 
     public float CalculateEfficiencyScore()
     {
-        // 1. Считаем сумму эффективных статов (которые уже уменьшены усталостью)
-        float sum = 0;
-        sum += GetEffectiveStat(StatType.Weaponry);
-        sum += GetEffectiveStat(StatType.Coding);
-        sum += GetEffectiveStat(StatType.Stealth);
-        sum += GetEffectiveStat(StatType.Cruelty);
-        sum += GetEffectiveStat(StatType.Charisma); // Если нужна харизма
+        if (_baseStats.Count == 0) return 0f;
 
-        // 2. Среднее значение (максимум 8.0)
-        float average = sum / 5.0f;
+        float sum = 0f;
+        foreach (StatType type in _baseStats.Keys)
+        {
+            sum += GetEffectiveStat(type);
+        }
 
-        // 3. Можно умножить на 10, чтобы было число типа "65", "82" (как рейтинг в FIFA)
-        // Или оставить дробным "6.5". Давай сделаем дробным, стиль Superhot любит минимализм.
-
-        return (float)System.Math.Round(average, 1); // Округляем до 1 знака (6.4)
+        float average = sum / _baseStats.Count;
+        return (float)Math.Round(average, 1);
     }
-    // Метод добавления усталости после миссии
+
     public void AddFatigue(int amount)
     {
-        fatigue = Mathf.Clamp(fatigue + amount, 0, 100);
-        Debug.Log($"{Name} устал. Текущая усталость: {fatigue}. Штраф к статам: -{fatigue / FatiguePenaltyStep}");
+        if (amount <= 0) return;
+        Fatigue = Mathf.Clamp(Fatigue + amount, 0, MaxFatigue);
     }
 
-    // Метод отдыха
     public void Rest(int amount)
     {
-        fatigue = Mathf.Clamp(fatigue - amount, 0, 100);
+        if (amount <= 0) return;
+        Fatigue = Mathf.Clamp(Fatigue - amount, 0, MaxFatigue);
     }
 }

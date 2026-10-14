@@ -1,44 +1,62 @@
+using System;
 using UnityEngine;
 using UnityEngine.UI;
 
+[RequireComponent(typeof(Button))]
 public class MissionNode : MonoBehaviour
 {
     private MissionSO _mission;
-    private DispatchWindow _dispatchWindow;
+    private Transform _spawnPoint;
+    private Action<MissionNode> _onNodeClicked;
+    private Action<Transform> _onNodeReleased;
     private Button _button;
 
-    public void Setup(MissionSO mission, DispatchWindow window)
+    public MissionSO Mission => _mission;
+
+    private void Awake()
     {
-        _mission = mission;
-        _dispatchWindow = window;
-
-        // === ФИКС КРИВОГО СПАВНА ===
-        // 1. Сбрасываем масштаб. Unity любит ставить Scale != 1 при спавне UI
-        transform.localScale = Vector3.one;
-
-        // 2. Обнуляем Z позицию, чтобы точка не висела "над" или "под" картой
-        Vector3 localPos = transform.localPosition;
-        localPos.z = 0;
-        transform.localPosition = localPos;
-        // ===========================
-
         _button = GetComponent<Button>();
-        if (_button == null) _button = gameObject.AddComponent<Button>();
-
-        _button.onClick.RemoveAllListeners();
-        _button.onClick.AddListener(OnNodeClicked);
+        _button.onClick.AddListener(HandleClick);
     }
 
-    private void OnNodeClicked()
+    private void OnDestroy()
     {
-        if (_dispatchWindow != null)
+        if (_button != null)
         {
-            // Передаем ссылку на себя (this), чтобы Диспетчер знал, кого потом удалять
-            _dispatchWindow.OpenWindow(_mission, this);
+            _button.onClick.RemoveListener(HandleClick);
         }
-        else
-        {
-            Debug.LogError("MissionNode: Нет ссылки на DispatchWindow! Проверь MapManager.");
-        }
+    }
+
+    public void Initialize(
+        MissionSO mission,
+        Transform spawnPoint,
+        Action<MissionNode> onNodeClicked,
+        Action<Transform> onNodeReleased)
+    {
+        _mission = mission;
+        _spawnPoint = spawnPoint;
+        _onNodeClicked = onNodeClicked;
+        _onNodeReleased = onNodeReleased;
+
+        transform.localScale = Vector3.one;
+        Vector3 localPos = transform.localPosition;
+        localPos.z = 0f;
+        transform.localPosition = localPos;
+    }
+
+    public void SetInteractable(bool interactable)
+    {
+        if (_button != null) _button.interactable = interactable;
+    }
+
+    public void CompleteAndDestroy()
+    {
+        _onNodeReleased?.Invoke(_spawnPoint);
+        Destroy(gameObject);
+    }
+
+    private void HandleClick()
+    {
+        _onNodeClicked?.Invoke(this);
     }
 }

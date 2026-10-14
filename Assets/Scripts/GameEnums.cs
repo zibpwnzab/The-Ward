@@ -1,8 +1,8 @@
 public enum StatType
 {
-    Weaponry,   // Умение работать с оружием
-    Coding,     // Кодинг
-    Charisma,   // Харизма
-    Stealth,    // Скрытность
-    Cruelty     // Жестокость (моя любимая стата, кстати)
+    Weaponry = 0,
+    Coding = 1,
+    Charisma = 2,
+    Stealth = 3,
+    Cruelty = 4
 }

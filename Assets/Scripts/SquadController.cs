@@ -1,9 +1,13 @@
-using UnityEngine;
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine;
 
 public class SquadController : MonoBehaviour
 {
+    private const float ArrivalThreshold = 1f;
+    private const float TailZOffset = -5f;
+
     [Header("Visuals")]
     [SerializeField] private RectTransform movingIcon;
     [SerializeField] private LineRenderer tailLine;
@@ -11,123 +15,136 @@ public class SquadController : MonoBehaviour
     [Header("Settings")]
     [SerializeField] private float moveSpeed = 400f;
 
-    private List<Vector3> _pathPoints = new List<Vector3>();
+    private readonly List<Vector3> _pathPoints = new List<Vector3>();
     private List<Agent> _assignedAgents;
-    private MissionNode _targetNode; // Та самая красная точка
+    private MissionNode _targetNode;
     private MissionSO _missionData;
+    private Action<MissionSO, List<Agent>, Action<bool>> _onSquadArrived;
+    private Action<List<Agent>, bool> _onSquadReturned;
 
-    public void Setup(List<Vector3> routePoints, MissionNode targetNode, List<Agent> agents, float duration, MissionSO mission)
+    public void Initialize(
+        List<Vector3> routePoints,
+        MissionNode targetNode,
+        List<Agent> agents,
+        MissionSO mission,
+        Action<MissionSO, List<Agent>, Action<bool>> onSquadArrived,
+        Action<List<Agent>, bool> onSquadReturned)
     {
-        _targetNode = targetNode; // <--- ВАЖНО: Запоминаем точку тут
+        _targetNode = targetNode;
         _assignedAgents = agents;
         _missionData = mission;
+        _onSquadArrived = onSquadArrived;
+        _onSquadReturned = onSquadReturned;
 
-        // Формируем путь
-        if (routePoints != null) _pathPoints.AddRange(routePoints);
-
-        // Добавляем координаты самой цели в конец пути
-        if (targetNode != null)
+        if (_targetNode != null)
         {
-            _pathPoints.Add(targetNode.transform.position);
+            _targetNode.SetInteractable(false);
         }
 
-        // Ставим на старт
+        if (routePoints != null)
+        {
+            _pathPoints.AddRange(routePoints);
+        }
+
+        if (_targetNode != null)
+        {
+            _pathPoints.Add(_targetNode.transform.position);
+        }
+
         if (_pathPoints.Count > 0)
         {
             transform.position = _pathPoints[0];
-            movingIcon.position = _pathPoints[0];
+            if (movingIcon != null) movingIcon.position = _pathPoints[0];
         }
 
         DrawTail();
-        StartCoroutine(MissionRoutine(duration));
+        StartCoroutine(MissionRoutine());
     }
 
     private void DrawTail()
     {
-        if (tailLine != null && _pathPoints.Count > 0)
+        if (tailLine == null || _pathPoints.Count == 0) return;
+
+        tailLine.positionCount = _pathPoints.Count;
+        for (int i = 0; i < _pathPoints.Count; i++)
         {
-            tailLine.positionCount = _pathPoints.Count;
-            for (int i = 0; i < _pathPoints.Count; i++)
-            {
-                Vector3 p = _pathPoints[i];
-                p.z = -5; // Чтобы было видно поверх карты
-                tailLine.SetPosition(i, p);
-            }
+            Vector3 point = _pathPoints[i];
+            point.z = TailZOffset;
+            tailLine.SetPosition(i, point);
         }
     }
 
-    private IEnumerator MissionRoutine(float duration)
+    private IEnumerator MissionRoutine()
     {
-        // 1. Едем ТУДА
         foreach (Vector3 point in _pathPoints)
         {
             yield return MoveTo(point);
         }
 
-        Debug.Log("Прибыли на место! Вызываем окно...");
+        bool isMiniGameResolved = false;
+        bool isMissionSuccessful = false;
 
-        // 2. ОТКРЫВАЕМ ОКНО СИТУАЦИИ
-        // Ищем окно, даже если оно выключено
-        var activeWindow = FindFirstObjectByType<MissionActiveUI>(FindObjectsInactive.Include);
-
-        // Флаг, который переключит кнопка в окне
-        bool isMissionStarted = false;
-
-        if (activeWindow != null)
+        if (_onSquadArrived != null)
         {
-            // Передаем данные и коллбек
-            activeWindow.Open(_missionData, _assignedAgents, () => { isMissionStarted = true; });
+            _onSquadArrived.Invoke(_missionData, _assignedAgents, success =>
+            {
+                isMissionSuccessful = success;
+                isMiniGameResolved = true;
+            });
 
-            // Ждем, пока игрок нажмет кнопку PROCEED
-            yield return new WaitUntil(() => isMissionStarted);
-        }
-        else
-        {
-            Debug.LogError("Окно MissionActiveUI не найдено! Пропускаем этап окна.");
+            yield return new WaitUntil(() => isMiniGameResolved);
         }
 
-        // 3. РАБОТАЕМ (Имитация бурной деятельности)
-        yield return new WaitForSeconds(duration);
+        if (_missionData != null && _missionData.executionDurationSeconds > 0f)
+        {
+            yield return new WaitForSeconds(_missionData.executionDurationSeconds);
+        }
 
-        // 4. УДАЛЯЕМ МИССИЮ (ФИКС)
         if (_targetNode != null)
         {
-            Debug.Log($"Уничтожаем точку: {_targetNode.name}");
-            
-
+            _targetNode.CompleteAndDestroy();
         }
-        else
+
+        if (tailLine != null)
         {
-            // Если этот лог вылезет — значит в Setup пришел null!
-            Debug.LogWarning("Красная точка не удалилась, так как ссылка пустая!");
+            tailLine.enabled = false;
         }
 
-        // Убираем хвост
-        if (tailLine != null) tailLine.enabled = false;
-
-        // 5. ЕДЕМ ДОМОЙ (В обратном порядке)
         _pathPoints.Reverse();
         foreach (Vector3 point in _pathPoints)
         {
             yield return MoveTo(point);
         }
 
-        // 6. ОСВОБОЖДАЕМ АГЕНТОВ
-        foreach (var agent in _assignedAgents) agent.isBusy = false;
+        if (_assignedAgents != null)
+        {
+            int fatiguePenalty = _missionData != null ? _missionData.fatigueCost : 20;
+            if (!isMissionSuccessful)
+            {
+                fatiguePenalty = Mathf.RoundToInt(fatiguePenalty * 1.5f);
+            }
 
-        // Обновляем список в UI
-        UIManager ui = FindFirstObjectByType<UIManager>();
-        if (ui != null) ui.RefreshRosterUI();
+            foreach (var agent in _assignedAgents)
+            {
+                agent.AddFatigue(fatiguePenalty);
+                agent.SetBusy(false);
+            }
+        }
 
-        // Удаляем машинку
+        _onSquadReturned?.Invoke(_assignedAgents, isMissionSuccessful);
         Destroy(gameObject);
     }
 
     private IEnumerator MoveTo(Vector3 destination)
     {
-        while (Vector3.Distance(movingIcon.position, destination) > 1f)
+        if (movingIcon == null) yield break;
+
+        while (Vector3.Distance(movingIcon.position, destination) > ArrivalThreshold)
         {
-            movingIcon.position = Vector3.MoveTowards(movingIcon.position, destination, moveSpeed * Time.deltaTime);
+            movingIcon.position = Vector3.MoveTowards(
+                movingIcon.position,
+                destination,
+                moveSpeed * Time.deltaTime);
             yield return null;
         }
     }

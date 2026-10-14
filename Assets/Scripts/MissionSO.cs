@@ -1,40 +1,56 @@
-using UnityEngine;
+using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 [CreateAssetMenu(fileName = "NewMission", menuName = "Dispatch/Mission")]
 public class MissionSO : ScriptableObject
 {
-    [Header("Info")]
-    public string title;
-    [TextArea] public string description;
-
-    [Header("Visuals")]
-    public Sprite missionImage;
-    public DistrictRoute assignedRoute;
-
-    [Header("Spawn Settings")]
-    [Tooltip("„ерез сколько секунд после старта игры по€витс€ этот вызов")]
-    public float spawnDelaySeconds = 0f; // <--- ¬ќ“ “¬ќя Ќќ¬јя ѕ≈–≈ћ≈ЌЌјя
-
-    [Header("Team")]
-    [Range(1, 4)] public int maxAgents = 2;
-
-    [Header("Configuration")]
-    public int durationTurns = 1;
-
-    [System.Serializable]
+    [Serializable]
     public struct StatRequirement
     {
         public StatType stat;
-        [Range(1, 8)] public int minLevel;
+        [Range(1, Agent.MaxStatValue)] public int minLevel;
     }
 
-    [Header("Mission Requirements")]
-    public List<StatRequirement> requiredStats;
+    [Header("General Info")]
+    public string title;
+    [TextArea] public string description;
+    public Sprite missionImage;
+
+    [Header("Routing & Timing")]
+    public DistrictRoute assignedRoute;
+    [Min(0f)] public float spawnDelaySeconds = 0f;
+    [Min(1f)] public float executionDurationSeconds = 5f;
+
+    [Header("Team & Fatigue")]
+    [Range(1, 4)] public int maxAgents = 2;
+    [Range(5, 50)] public int fatigueCost = 20;
+
+    [Header("Requirements")]
+    public List<StatRequirement> requiredStats = new List<StatRequirement>();
+
+    public int GetRequiredLevel(StatType type, int defaultBaseline = 2)
+    {
+        if (requiredStats != null)
+        {
+            foreach (var req in requiredStats)
+            {
+                if (req.stat == type) return req.minLevel;
+            }
+        }
+        return defaultBaseline;
+    }
 
     public float CalculateSuccessChance(Agent agent)
     {
+        if (agent == null) return 0f;
         if (requiredStats == null || requiredStats.Count == 0) return 1.0f;
+
+        const float BonusPerSurplusPoint = 0.1f;
+        const float MaxSurplusBonus = 0.5f;
+        const float PenaltyPerDeficitPoint = 0.2f;
+        const float MinChance = 0.05f;
+        const float MaxChance = 0.95f;
 
         float totalScore = 0f;
 
@@ -45,15 +61,15 @@ public class MissionSO : ScriptableObject
 
             if (delta >= 0)
             {
-                totalScore += 1.0f + Mathf.Clamp(delta * 0.1f, 0f, 0.5f);
+                totalScore += 1.0f + Mathf.Clamp(delta * BonusPerSurplusPoint, 0f, MaxSurplusBonus);
             }
             else
             {
-                totalScore += 1.0f + (delta * 0.2f);
+                totalScore += 1.0f + (delta * PenaltyPerDeficitPoint);
             }
         }
 
         float averageChance = totalScore / requiredStats.Count;
-        return Mathf.Clamp(averageChance, 0.05f, 0.95f);
+        return Mathf.Clamp(averageChance, MinChance, MaxChance);
     }
 }

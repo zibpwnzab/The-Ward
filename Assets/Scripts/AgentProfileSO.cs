@@ -1,30 +1,44 @@
-using UnityEngine;
+using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 [CreateAssetMenu(fileName = "NewAgentProfile", menuName = "Dispatch/Agent Profile")]
 public class AgentProfileSO : ScriptableObject
 {
-    [Header("Bio")]
-    public string agentName;
-    public Sprite portrait;
-
-    [Header("Base Stats (Max 8)")]
-    [Range(0, 8)] public int weaponry;
-    [Range(0, 8)] public int coding;
-    [Range(0, 8)] public int charisma;
-    [Range(0, 8)] public int stealth;
-    [Range(0, 8)] public int cruelty;
-
-    // ћетод дл€ удобного получени€ статов в виде словар€
-    public Dictionary<StatType, int> GetStatsDict()
+    [Serializable]
+    public struct StatConfig
     {
-        return new Dictionary<StatType, int>
+        public StatType statType;
+        [Range(Agent.MinStatValue, Agent.MaxStatValue)] public int baseValue;
+    }
+
+    [Header("Bio")]
+    [SerializeField] private string agentName;
+    [SerializeField] private Sprite portrait;
+
+    [Header("Base Stats")]
+    [SerializeField] private List<StatConfig> stats = new List<StatConfig>();
+
+    public string AgentName => agentName;
+    public Sprite Portrait => portrait;
+
+    public Dictionary<StatType, int> GetStatsDictionary()
+    {
+        var dict = new Dictionary<StatType, int>();
+
+        foreach (StatType type in Enum.GetValues(typeof(StatType)))
         {
-            { StatType.Weaponry, weaponry },
-            { StatType.Coding, coding },
-            { StatType.Charisma, charisma },
-            { StatType.Stealth, stealth },
-            { StatType.Cruelty, cruelty }
-        };
+            dict[type] = Agent.MinStatValue;
+        }
+
+        if (stats != null)
+        {
+            foreach (var config in stats)
+            {
+                dict[config.statType] = Mathf.Clamp(config.baseValue, Agent.MinStatValue, Agent.MaxStatValue);
+            }
+        }
+
+        return dict;
     }
 }

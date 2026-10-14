@@ -8,49 +8,60 @@ public class UIManager : MonoBehaviour
     [SerializeField] private Transform rosterContainer;
     [SerializeField] private AgentUIEntry agentCardPrefab;
 
+    private void OnEnable()
+    {
+        if (rosterManager != null)
+        {
+            rosterManager.OnRosterChanged += RefreshRosterUI;
+        }
+    }
+
+    private void OnDisable()
+    {
+        if (rosterManager != null)
+        {
+            rosterManager.OnRosterChanged -= RefreshRosterUI;
+        }
+    }
+
     private void Start()
     {
-        Invoke(nameof(RefreshRosterUI), 0.1f);
+        RefreshRosterUI();
     }
 
     public void RefreshRosterUI()
     {
-        // 1. Чистим список
-        if (rosterContainer != null)
+        if (rosterContainer == null || rosterManager == null) return;
+
+        foreach (Transform child in rosterContainer)
         {
-            foreach (Transform child in rosterContainer) Destroy(child.gameObject);
+            Destroy(child.gameObject);
         }
 
-        // 2. Получаем данные
-        RosterManager roster = FindFirstObjectByType<RosterManager>(); // Обновила на новый метод Unity
-        if (roster == null) return;
+        IReadOnlyList<Agent> activeAgents = rosterManager.GetActiveRoster();
 
-        List<Agent> activeAgents = roster.GetActiveRoster();
-
-        // 3. Рисуем
         foreach (var agent in activeAgents)
         {
-            if (!agent.isBusy)
+            if (!agent.IsBusy)
             {
-                CreateAgentCard(agent); // <--- Теперь этот метод существует внизу!
+                CreateAgentCard(agent);
             }
         }
     }
 
-    // === ВОТ ТОТ САМЫЙ МЕТОД, КОТОРОГО НЕ ХВАТАЛО ===
     private void CreateAgentCard(Agent agent)
     {
+        if (agentCardPrefab == null) return;
+
         AgentUIEntry newCard = Instantiate(agentCardPrefab, rosterContainer);
-        newCard.Setup(agent);
+        newCard.Initialize(agent, rosterContainer);
     }
-    // ===============================================
 
     public void OnNextShiftButtonClicked()
     {
         if (rosterManager != null)
         {
             rosterManager.SwapShifts();
-            RefreshRosterUI();
         }
     }
 }

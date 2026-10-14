@@ -1,81 +1,68 @@
+using System;
 using UnityEngine;
-using UnityEngine.UI;
 using UnityEngine.EventSystems;
 
 public class MissionSlot : MonoBehaviour, IDropHandler
 {
-    [Header("UI")]
-    [SerializeField] private Image iconImage;
+    private AgentUIEntry _assignedCard;
+    private Action _onSlotChanged;
 
-    private Agent _assignedAgent;
-    private DispatchWindow _parentWindow;
+    public Agent AssignedAgent => _assignedCard != null ? _assignedCard.LinkedAgent : null;
 
-    public void Initialize(DispatchWindow window)
+    public void Initialize(Action onSlotChanged)
     {
-        _parentWindow = window;
-        _assignedAgent = null;
+        _onSlotChanged = onSlotChanged;
+        _assignedCard = null;
     }
 
     public void OnDrop(PointerEventData eventData)
     {
-        if (eventData.pointerDrag != null)
+        if (eventData.pointerDrag == null) return;
+
+        if (eventData.pointerDrag.TryGetComponent(out AgentUIEntry agentCard))
         {
-            var agentCard = eventData.pointerDrag.GetComponent<AgentUIEntry>();
-            if (agentCard != null)
-            {
-                AssignAgent(agentCard);
-            }
+            AssignAgentCard(agentCard);
         }
     }
 
-    private void AssignAgent(AgentUIEntry card)
+    private void AssignAgentCard(AgentUIEntry card)
     {
-        // ПРОВЕРКА 1: А есть ли данные в самой карточке?
-        if (card.LinkedAgent == null)
+        if (card == null || card.LinkedAgent == null) return;
+
+        if (_assignedCard != null && _assignedCard != card)
         {
-            Debug.LogError("ОШИБКА: В перетаскиваемой карточке нет данных об агенте (LinkedAgent == null)!");
-            return;
+            _assignedCard.ReturnToRoster();
         }
 
-        // Если слот занят — выгоняем старого
-        if (_assignedAgent != null && transform.childCount > 0)
-        {
-            var oldCard = GetComponentInChildren<AgentUIEntry>();
-            if (oldCard != null && oldCard != card)
-            {
-                oldCard.ReturnToRoster();
-            }
-        }
-
-        // Присваиваем агента
-        _assignedAgent = card.LinkedAgent;
-
-        Debug.Log($"Слот принял агента: {_assignedAgent.Name}"); // Лог успеха
-
-        // Визуально забираем карточку
-        card.transform.SetParent(transform);
+        _assignedCard = card;
+        card.transform.SetParent(transform, false);
         card.SetSlotMode(true);
 
-        // Сообщаем окну пересчитать
-        if (_parentWindow != null)
+        _onSlotChanged?.Invoke();
+    }
+
+    public void ClearSlot()
+    {
+        _assignedCard = null;
+        _onSlotChanged?.Invoke();
+    }
+
+    public void ReleaseCardToRoster()
+    {
+        if (_assignedCard != null)
         {
-            _parentWindow.OnTeamChanged();
-        }
-        else
-        {
-            Debug.LogError("ОШИБКА: Слот не знает про DispatchWindow (Initialize не был вызван)!");
+            AgentUIEntry card = _assignedCard;
+            _assignedCard = null;
+            card.ReturnToRoster();
         }
     }
 
-    public void OnAgentRemoved()
+    public void ConsumeCardForDispatch()
     {
-        Debug.Log("Агент убран из слота.");
-        _assignedAgent = null;
-        if (_parentWindow != null) _parentWindow.OnTeamChanged();
-    }
-
-    public Agent GetAgent()
-    {
-        return _assignedAgent;
+        if (_assignedCard != null)
+        {
+            Destroy(_assignedCard.gameObject);
+            _assignedCard = null;
+        }
     }
 }

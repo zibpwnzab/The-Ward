@@ -1,40 +1,42 @@
+using System;
 using UnityEngine;
-using UnityEngine.UI;
+using Random = UnityEngine.Random;
 
+[RequireComponent(typeof(RectTransform))]
 public class MissionBall : MonoBehaviour
 {
-    [Header("Physics")]
+    private const float StopSpeedThreshold = 10f;
+    private const float WallPadding = 2f;
+    private const float BounceJitter = 50f;
+
+    [Header("Physics Settings")]
     [SerializeField] private float initialSpeed = 500f;
-    [SerializeField] private float friction = 200f; // Торможение
-    [SerializeField] private float bounceForce = 0.8f; // Упругость (1 = вечно скачет, 0.5 = гасит скорость)
+    [SerializeField] private float friction = 200f;
+    [SerializeField] private float bounceForce = 0.8f;
 
     private RectTransform _rect;
     private Vector2 _velocity;
-    private bool _isMoving = false;
+    private bool _isMoving;
 
-    // Данные для проверки
-    private UI_RadarChart _missionChart; // Красный (Стены)
-    private UI_RadarChart _teamChart;    // Зеленый (Зона победы)
-    private System.Action<bool> _onResult; // Коллбек (true = win, false = loss)
+    private UI_RadarChart _missionChart;
+    private UI_RadarChart _teamChart;
+    private Action<bool> _onResult;
 
     private void Awake()
     {
         _rect = GetComponent<RectTransform>();
     }
 
-    public void Launch(UI_RadarChart mission, UI_RadarChart team, System.Action<bool> callback)
+    public void Launch(UI_RadarChart mission, UI_RadarChart team, Action<bool> callback)
     {
         _missionChart = mission;
         _teamChart = team;
         _onResult = callback;
 
-        // Сброс позиции в центр
         _rect.anchoredPosition = Vector2.zero;
 
-        // Запуск в случайную сторону
         float randomAngle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
         _velocity = new Vector2(Mathf.Cos(randomAngle), Mathf.Sin(randomAngle)) * initialSpeed;
-
         _isMoving = true;
     }
 
@@ -42,57 +44,40 @@ public class MissionBall : MonoBehaviour
     {
         if (!_isMoving) return;
 
-        // 1. Движение
-        _rect.anchoredPosition += _velocity * Time.unscaledDeltaTime; // Используем unscaled, так как игра на паузе!
+        float dt = Time.unscaledDeltaTime;
+        _rect.anchoredPosition += _velocity * dt;
 
-        // 2. Трение (замедление)
-        if (_velocity.magnitude > 0)
+        if (_velocity.magnitude > 0f)
         {
-            _velocity -= _velocity.normalized * friction * Time.unscaledDeltaTime;
+            _velocity -= _velocity.normalized * (friction * dt);
 
-            // Если скорость совсем маленькая - останавливаемся
-            if (_velocity.magnitude < 10f)
+            if (_velocity.magnitude < StopSpeedThreshold)
             {
                 StopAndCheckResult();
                 return;
             }
         }
 
-        // 3. Проверка удара о стену (Красный график)
         CheckWallCollision();
     }
 
     private void CheckWallCollision()
     {
-        // Переводим текущую позицию в полярные координаты (Угол и Дистанция)
+        if (_missionChart == null) return;
+
         Vector2 pos = _rect.anchoredPosition;
         float dist = pos.magnitude;
-
-        // Если мы в центре, стен нет
         if (dist < 1f) return;
 
-        float angle = Mathf.Atan2(pos.y, pos.x) * Mathf.Rad2Deg; // -180..180
-        if (angle < 0) angle += 360;
+        float angle = GetNormalizedAngle(pos);
+        float wallDist = Mathf.Max(_missionChart.GetRadiusAtAngle(angle), WallPadding * 2f);
 
-        // Спрашиваем у красного графика: "Где стена под этим углом?"
-        float wallDist = _missionChart.GetRadiusAtAngle(angle);
-
-        // Если вылетели за стену
         if (dist > wallDist)
         {
-            // Возвращаем мяч внутрь (чтобы не пролетел сквозь стену)
-            _rect.anchoredPosition = pos.normalized * (wallDist - 2f);
-
-            // ОТСКОК:
-            // Для простоты отражаем вектор скорости относительно центра. 
-            // (Это не физически точно для многоугольника, но для UI-шарика выглядит норм)
-            // Можно усложнить, считая нормаль к грани, но начни с этого.
-
-            Vector2 normal = -pos.normalized; // Вектор к центру
+            _rect.anchoredPosition = pos.normalized * (wallDist - WallPadding);
+            Vector2 normal = -pos.normalized;
             _velocity = Vector2.Reflect(_velocity, normal) * bounceForce;
-
-            // Иногда добавляем чуть хаоса, чтобы не застрял
-            _velocity += Random.insideUnitCircle * 50f;
+            _velocity += Random.insideUnitCircle * BounceJitter;
         }
     }
 
@@ -101,23 +86,23 @@ public class MissionBall : MonoBehaviour
         _isMoving = false;
         _velocity = Vector2.zero;
 
-        // ПРОВЕРКА ПОБЕДЫ
-        // Мы остановились. Мы точно внутри Красного (стен). 
-        // Вопрос: мы внутри Зеленого?
+        if (_teamChart == null)
+        {
+            _onResult?.Invoke(false);
+            return;
+        }
 
         Vector2 pos = _rect.anchoredPosition;
-        float angle = Mathf.Atan2(pos.y, pos.x) * Mathf.Rad2Deg;
-        if (angle < 0) angle += 360;
-
+        float angle = GetNormalizedAngle(pos);
         float teamRadius = _teamChart.GetRadiusAtAngle(angle);
-        float currentDist = pos.magnitude;
-
-        // Если наше расстояние от центра МЕНЬШЕ, чем радиус зеленого графика в этой точке
-        // Значит, мы внутри зеленой зоны.
-        bool isWin = currentDist <= teamRadius;
-
-        Debug.Log($"Ball Stopped. Dist: {currentDist}, TeamLimit: {teamRadius}. Result: {isWin}");
+        bool isWin = pos.magnitude <= teamRadius;
 
         _onResult?.Invoke(isWin);
+    }
+
+    private static float GetNormalizedAngle(Vector2 position)
+    {
+        float angle = Mathf.Atan2(position.y, position.x) * Mathf.Rad2Deg;
+        return angle < 0f ? angle + 360f : angle;
     }
 }

@@ -1,46 +1,53 @@
-using UnityEngine;
 using System.Collections.Generic;
+using UnityEngine;
 
-[ExecuteAlways] // Магия: скрипт работает прямо в редакторе!
+[ExecuteAlways]
 public class DistrictRoute : MonoBehaviour
 {
-    [Tooltip("Кинь сюда LineRenderer, чтобы скрипт сам его заполнил")]
     [SerializeField] private LineRenderer lineRenderer;
+    [SerializeField] private Color gizmoColor = Color.yellow;
 
-    [Tooltip("Цвет линии в редакторе")]
-    [SerializeField] private Color debugColor = Color.yellow;
-
-    // В Unity редакторе: Когда ты что-то меняешь, линия перерисуется сама
-    private void Update()
+    private void OnValidate()
     {
-        if (!Application.isPlaying) // Только в режиме редактирования
-        {
-            BakeLineFromChildren();
-        }
+        BakeLineFromChildren();
     }
 
-    // Кнопка для ручного обновления (на всякий случай)
+    private void OnTransformChildrenChanged()
+    {
+        BakeLineFromChildren();
+    }
+
+#if UNITY_EDITOR
+    private void Update()
+    {
+        if (!Application.isPlaying && transform.hasChanged)
+        {
+            BakeLineFromChildren();
+            transform.hasChanged = false;
+        }
+    }
+#endif
+
     [ContextMenu("Bake Route")]
     public void BakeLineFromChildren()
     {
-        if (lineRenderer == null) lineRenderer = GetComponent<LineRenderer>();
-        if (lineRenderer == null) return;
+        if (lineRenderer == null && !TryGetComponent(out lineRenderer))
+        {
+            return;
+        }
 
-        // Берем всех детей этого объекта
         int childCount = transform.childCount;
         lineRenderer.positionCount = childCount;
 
         for (int i = 0; i < childCount; i++)
         {
-            // Ставим точку линии туда, где стоит ребенок
             lineRenderer.SetPosition(i, transform.GetChild(i).position);
         }
     }
 
-    // Этот метод вызывает SquadController в игре
     public List<Vector3> GetWaypoints()
     {
-        List<Vector3> points = new List<Vector3>();
+        var points = new List<Vector3>(transform.childCount);
         foreach (Transform child in transform)
         {
             points.Add(child.position);
@@ -48,16 +55,15 @@ public class DistrictRoute : MonoBehaviour
         return points;
     }
 
-    // Рисуем линии в сцене, чтобы ты видел связь даже без LineRenderer
     private void OnDrawGizmos()
     {
-        Gizmos.color = debugColor;
-        if (transform.childCount > 0)
+        int count = transform.childCount;
+        if (count < 2) return;
+
+        Gizmos.color = gizmoColor;
+        for (int i = 0; i < count - 1; i++)
         {
-            for (int i = 0; i < transform.childCount - 1; i++)
-            {
-                Gizmos.DrawLine(transform.GetChild(i).position, transform.GetChild(i + 1).position);
-            }
+            Gizmos.DrawLine(transform.GetChild(i).position, transform.GetChild(i + 1).position);
         }
     }
 }
