@@ -1,2 +1,12 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+# Ignore Unity non-code assets and third-party shaders in GitHub language stats
+*.shader linguist-vendored
+*.cginc linguist-vendored
+*.hlsl linguist-vendored
+*.mat linguist-vendored
+*.asset linguist-vendored
+*.unity linguist-vendored
+*.prefab linguist-vendored
+Assets/Unity/** linguist-vendored
+Assets/TextMeshPro/** linguist-vendored
